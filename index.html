@@ -7,32 +7,51 @@
 </head>
 
 <body>
-    <h1>🔍 Detectar Puentes en un Grafo (DFS)</h1>
+    <header class="app-header z-depth-1">
+        <h1>🔍 Detectar Puentes en un Grafo (DFS)</h1>
+        <div id="graphMessage" class="graph-message"></div>
+    </header>
 
-    <div class="container">
-        <div class="left-panel">
-            <h3>Paleta</h3>
+    <main class="container">
+        <aside class="left-panel z-depth-1">
+            <h3 class="section-title">Paleta</h3>
             <div class="palette">
                 <button id="toolNode" class="tool-button active">Nodo</button>
                 <button id="toolConnector" class="tool-button">Conector</button>
+                <button id="toolHand" class="tool-button">Mano</button>
             </div>
 
-            <h3>Acciones</h3>
-            <button id="generateBtn">🎲 Generar grafo</button>
-            <button id="detectBtn">🔎 Detectar puentes</button>
-            <button id="clearBtn">🗑️ Limpiar grafo</button>
+            <div id="modeStatus" class="mode-status teal lighten-5">
+                Modo actual: Agregar nodos. Haz clic sobre el lienzo para crear nodos.
+            </div>
 
-            <h3>Aristas</h3>
-            <ul id="edgesList"></ul>
+            <h3 class="section-title">Acciones</h3>
+            <button id="generateBtn" class="btn waves">🎲 Generar grafo</button>
+            <button id="detectBtn" class="btn waves">🔎 Detectar puentes</button>
+            <button id="clearBtn" class="btn-flat red-text">🗑️ Limpiar grafo</button>
 
-            <h3>Puentes detectados</h3>
-            <ul id="bridgesList"></ul>
+            <h3 class="section-title">Aristas</h3>
+            <ul id="edgesList" class="list"></ul>
 
-            <div id="graphMessage" class="graph-message"></div>
-        </div>
+            <h3 class="section-title">Puentes detectados</h3>
+            <ul id="bridgesList" class="list"></ul>
+        </aside>
 
-        <canvas id="graphCanvas"></canvas>
-    </div>
+        <section class="canvas-wrapper z-depth-1">
+            <canvas id="graphCanvas"></canvas>
+
+            <!-- Menú flotante de nodo -->
+            <div id="nodeMenu" class="context-menu node-menu z-depth-2" style="display:none;">
+                <button id="nodeMenuConnect" class="btn-small teal">Conectar</button>
+                <button id="nodeMenuDelete" class="btn-small red">Eliminar</button>
+            </div>
+
+            <!-- Botón flotante de eliminar arista -->
+            <div id="edgeMenu" class="context-menu edge-menu z-depth-2" style="display:none;">
+                <button id="edgeMenuDelete" class="btn-floating red" title="Eliminar arista">🗑</button>
+            </div>
+        </section>
+    </main>
 
     <script src="app.js"></script>
 </body>

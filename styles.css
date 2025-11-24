@@ -1,79 +1,294 @@
+/* ===========================
+   RESET & BASE
+   =========================== */
 
-body {
-    margin: 0;
-    background: #f8f9fa;
-    font-family: Arial, sans-serif;
-}
-
-h1 {
-    text-align: center;
-    padding: 15px;
-}
-
-.container {
-    display: flex;
-    height: 90vh;
-}
-
-.left-panel {
-    width: 260px;
-    background: white;
-    padding: 15px;
-    border-right: 2px solid #ddd;
+* {
     box-sizing: border-box;
 }
 
-button {
-    width: 100%;
-    padding: 8px;
-    margin-bottom: 8px;
-    cursor: pointer;
-    background: #0077ff;
-    border: none;
-    color: white;
-    font-weight: bold;
-    border-radius: 4px;
+body {
+    margin: 0;
+    background: #f4f5fb;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #111827;
 }
 
-button:hover {
-    background: #005cd1;
-}
+/* ===========================
+   HEADER
+   =========================== */
 
-#graphCanvas {
-    flex: 1;
+.app-header {
     background: #ffffff;
-    cursor: pointer;
+    color: #111827;
+    padding: 14px 24px 10px 24px;
+    border-bottom: 1px solid #e5e7eb;
 }
 
-ul {
-    list-style: none;
-    padding-left: 0;
+.app-header h1 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 600;
+    text-align: center;
 }
 
-li {
-    margin-bottom: 5px;
+/* Mensaje centrado, tipo pill */
+.graph-message {
+    max-width: 900px;
+    margin: 10px auto 0 auto;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-weight: 500;
+    text-align: center;
+    font-size: 0.85rem;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    color: #111827;
 }
 
+/* ===========================
+   LAYOUT
+   =========================== */
+
+.container {
+    display: flex;
+    height: calc(100vh - 90px);
+    padding: 16px 18px 18px 18px;
+    gap: 14px;
+}
+
+/* Tarjeta genérica (antes z-depth) */
+.z-depth-1 {
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+}
+
+.z-depth-2 {
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+}
+
+/* ===========================
+   PANEL IZQUIERDO
+   =========================== */
+
+.left-panel {
+    width: 280px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+}
+
+.section-title {
+    margin: 14px 0 6px 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #4b5563;
+}
+
+/* Paleta de herramientas */
 .palette {
     display: flex;
     gap: 8px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 
-.tool-button {
-    width: 50%;
+/* ===========================
+   BOTONES
+   =========================== */
+
+button {
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
     font-size: 0.85rem;
 }
 
-.tool-button.active {
-    background: #28a745;
+/* Botón principal y botón de herramienta comparten base */
+.btn,
+.tool-button {
+    padding: 8px 10px;
+    border-radius: 999px;
+    background: #4f46e5;          /* Indigo */
+    color: #ffffff;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0.01em;
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
 }
 
-.graph-message {
-    margin-top: 10px;
-    padding: 8px;
-    border-radius: 5px;
-    font-weight: bold;
-    text-align: center;
-    font-size: 0.9rem;
+/* Hover general */
+.btn:hover,
+.tool-button:hover {
+    background: #4338ca;
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.25);
+    transform: translateY(-1px);
+}
+
+/* Botones de herramienta en la paleta */
+.tool-button {
+    flex: 1;
+    font-size: 0.8rem;
+    padding: 7px 6px;
+    background: #e5e7eb;
+    color: #374151;
+    box-shadow: none;
+}
+
+.tool-button.active {
+    background: #4f46e5;
+    color: #ffffff;
+}
+
+/* Botón pequeño (menús de nodo) */
+.btn-small {
+    font-size: 0.75rem;
+    padding: 5px 10px;
+    border-radius: 999px;
+    color: #ffffff;
+}
+
+/* Flat (limpiar) */
+.btn-flat {
+    background: transparent;
+    color: #ef4444;
+    padding: 7px 0;
+    box-shadow: none;
+    border-radius: 999px;
+}
+
+.btn-flat:hover {
+    background: rgba(239, 68, 68, 0.06);
+}
+
+/* Botón flotante (tacho de arista) */
+.btn-floating {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+}
+
+/* Colores semánticos que ya usas en HTML */
+.red {
+    background: #ef4444;
+}
+.red:hover {
+    background: #dc2626;
+}
+.red-text {
+    color: #ef4444;
+}
+
+.teal {
+    background: #4f46e5; /* reciclamos 'teal' a tu color primario */
+}
+.teal:hover {
+    background: #4338ca;
+}
+
+/* .teal.lighten-5 para el mode-status actual */
+.teal.lighten-5 {
+    background: #eef2ff;
+}
+
+/* ===========================
+   MODE STATUS
+   =========================== */
+
+.mode-status {
+    font-size: 0.8rem;
+    margin-bottom: 14px;
+    padding: 9px 11px;
+    border-radius: 10px;
+    border: 1px solid #e0e7ff;
+    color: #3730a3;
+    background: #eef2ff;
+}
+
+/* ===========================
+   LISTAS
+   =========================== */
+
+.list {
+    list-style: none;
+    padding-left: 0;
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: #4b5563;
+}
+
+.list li {
+    margin-bottom: 4px;
+    padding: 2px 0;
+}
+
+/* ===========================
+   CANVAS
+   =========================== */
+
+.canvas-wrapper {
+    flex: 1;
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    background: radial-gradient(circle at top left, #e5edff 0, #f4f5fb 40%, #f9fafb 100%);
+}
+
+#graphCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: transparent;
+}
+
+/* ===========================
+   MENÚS CONTEXTUALES
+   =========================== */
+
+.context-menu {
+    position: absolute;
+    z-index: 10;
+    transform: translate(-50%, -50%);
+}
+
+/* Menú flotante de nodo */
+.node-menu {
+    background: #ffffff;
+    border-radius: 999px;
+    padding: 4px 6px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.18);
+}
+
+.node-menu .btn-small {
+    margin: 0;
+}
+
+/* Menú flotante de arista */
+.edge-menu .btn-floating {
+    margin: 0;
+    background: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 10px 25px rgba(239, 68, 68, 0.5);
+}
+
+.edge-menu .btn-floating:hover {
+    background: #dc2626;
+}
+
+/* ===========================
+   CURSOR (el JS solo cambia cursor por tipo)
+   =========================== */
+
+#graphCanvas {
+    cursor: default; /* se sobreescribe desde JS */
 }

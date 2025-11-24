@@ -1,9 +1,20 @@
-// Cambia esta URL a tu endpoint de Render cuando lo tengas desplegado.
-// Para pruebas locales, deja "http://localhost:8000".
+// API en Render
 const API_BASE = "https://grafos-fastapi.onrender.com";
 
 const canvas = document.getElementById("graphCanvas");
 const ctx = canvas.getContext("2d");
+
+const toolNodeBtn = document.getElementById("toolNode");
+const toolConnectorBtn = document.getElementById("toolConnector");
+const toolHandBtn = document.getElementById("toolHand");
+const modeStatusDiv = document.getElementById("modeStatus");
+
+const nodeMenu = document.getElementById("nodeMenu");
+const nodeMenuConnectBtn = document.getElementById("nodeMenuConnect");
+const nodeMenuDeleteBtn = document.getElementById("nodeMenuDelete");
+
+const edgeMenu = document.getElementById("edgeMenu");
+const edgeMenuDeleteBtn = document.getElementById("edgeMenuDelete");
 
 // --- estado global ---
 let nodes = [];       // {id, x, y}
@@ -11,8 +22,9 @@ let edges = [];       // {id, u, v}
 let nextNodeId = 0;
 let nextEdgeId = 0;
 
-let currentTool = "node"; // "node" | "connector" | null
+let currentTool = "node"; // "node" | "connector" | "hand"
 let selectedElement = null; // {type: 'node'|'edge', id}
+let hoverElement = null;    // {type: 'node'|'edge', id}
 let connectorStartNodeId = null;
 
 let draggingNode = null;
@@ -20,17 +32,20 @@ let dragOffsetX = 0;
 let dragOffsetY = 0;
 let currentBridges = [];   // lista de [u, v] desde backend
 
-// para dibujar el símbolo en el puntero
 let mouseX = 0;
 let mouseY = 0;
 let mouseInCanvas = false;
+
+let nodeMenuNodeId = null;
+let edgeMenuEdgeId = null;
 
 // ----------------------
 //   Config canvas
 // ----------------------
 function resizeCanvas() {
-    canvas.width = window.innerWidth - 300;
-    canvas.height = window.innerHeight - 100;
+    const wrapperRect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = wrapperRect.width;
+    canvas.height = wrapperRect.height;
     drawGraph();
 }
 window.addEventListener("resize", resizeCanvas);
@@ -39,28 +54,45 @@ resizeCanvas();
 // ----------------------
 //   Paleta de herramientas
 // ----------------------
-const toolNodeBtn = document.getElementById("toolNode");
-const toolConnectorBtn = document.getElementById("toolConnector");
+toolNodeBtn.onclick = () => setTool("node");
+toolConnectorBtn.onclick = () => setTool("connector");
+toolHandBtn.onclick = () => setTool("hand");
 
-toolNodeBtn.onclick = () => {
-    currentTool = "node";
-    connectorStartNodeId = null;
+function setTool(tool) {
+    currentTool = tool;
+    if (tool !== "connector") {
+        connectorStartNodeId = null;
+    }
     selectedElement = null;
-    setActiveToolButton();
-    drawGraph();
-};
+    hoverElement = null;
+    hideNodeMenu();
+    hideEdgeMenu();
 
-toolConnectorBtn.onclick = () => {
-    currentTool = "connector";
-    connectorStartNodeId = null;
-    selectedElement = null;
-    setActiveToolButton();
-    drawGraph();
-};
-
-function setActiveToolButton() {
     toolNodeBtn.classList.toggle("active", currentTool === "node");
     toolConnectorBtn.classList.toggle("active", currentTool === "connector");
+    toolHandBtn.classList.toggle("active", currentTool === "hand");
+
+    updateModeStatus();
+    updateCanvasCursor();
+    drawGraph();
+}
+
+function updateModeStatus() {
+    if (currentTool === "node") {
+        modeStatusDiv.textContent =
+            "Modo: Nodo. Haz clic en un espacio vacío para crear un nodo. Sobre un nodo verás opciones de Conectar / Eliminar.";
+    } else if (currentTool === "connector") {
+        if (connectorStartNodeId === null) {
+            modeStatusDiv.textContent =
+                "Modo: Conector. Haz clic en un nodo origen y luego en un nodo destino para crear una arista. ESC para volver a Mano.";
+        } else {
+            modeStatusDiv.textContent =
+                `Conectando desde el nodo ${connectorStartNodeId}. Haz clic en el nodo destino. ESC para cancelar.`;
+        }
+    } else {
+        modeStatusDiv.textContent =
+            "Modo: Mano. Arrastra nodos para reorganizarlos. Pasa sobre aristas para eliminarlas. ESC mantiene Mano.";
+    }
 }
 
 // ----------------------
@@ -72,11 +104,14 @@ document.getElementById("clearBtn").onclick = () => {
     nextNodeId = 0;
     nextEdgeId = 0;
     selectedElement = null;
+    hoverElement = null;
     connectorStartNodeId = null;
     currentBridges = [];
     updateEdgeList();
     updateBridgeList([]);
     setGraphMessage("");
+    hideNodeMenu();
+    hideEdgeMenu();
     drawGraph();
 };
 
@@ -92,6 +127,9 @@ document.getElementById("detectBtn").onclick = async () => {
     await detectBridgesAndShowMessage();
 };
 
+// ----------------------
+//   Backend /bridges
+// ----------------------
 async function detectBridgesAndShowMessage() {
     const payload = {
         nodes: nodes.length,
@@ -99,6 +137,12 @@ async function detectBridgesAndShowMessage() {
     };
 
     try {
+        setGraphMessage(
+            "⏳ Analizando el grafo para detectar puentes...",
+            "#e8f4ff",
+            "#00529b"
+        );
+
         const res = await fetch(`${API_BASE}/bridges`, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -115,13 +159,52 @@ async function detectBridgesAndShowMessage() {
         drawGraph();
 
         if (bridges.length > 0) {
-            setGraphMessage("🔴 Este grafo TIENE puentes", "#ffdddd", "#b50000");
+            setGraphMessage("🔴 Este grafo TIENE puentes", "#ffebee", "#c62828");
         } else {
-            setGraphMessage("🟢 Este grafo NO tiene puentes", "#ddffdd", "#006600");
+            setGraphMessage("🟢 Este grafo NO tiene puentes", "#e8f5e9", "#2e7d32");
         }
     } catch (err) {
         console.error(err);
-        alert("Error al llamar al backend. ¿Está corriendo la API?");
+        setGraphMessage(
+            "⚠️ Error al llamar al backend. Si es la primera vez, puede que el servidor esté levantando.",
+            "#ffebee",
+            "#c62828"
+        );
+    }
+}
+
+// ----------------------
+//   Warmup backend
+// ----------------------
+async function warmupBackend() {
+    setGraphMessage(
+        "🔄 Iniciando el servicio de análisis de grafos... la primera vez puede tardar algunos segundos.",
+        "#fff8e1",
+        "#ff8f00"
+    );
+
+    try {
+        const res = await fetch(`${API_BASE}/`, { method: "GET" });
+        if (res.ok) {
+            setGraphMessage(
+                "✅ Servicio de análisis listo. Genera un grafo o dibuja uno y presiona «Detectar puentes».",
+                "#e8f5e9",
+                "#2e7d32"
+            );
+        } else {
+            setGraphMessage(
+                "⚠️ No se pudo verificar el estado del servicio. Si al detectar puentes demora, es porque el servidor se está levantando.",
+                "#ffebee",
+                "#c62828"
+            );
+        }
+    } catch (err) {
+        console.error("Error en warmupBackend:", err);
+        setGraphMessage(
+            "⚠️ No se pudo conectar al servicio. Si al detectar puentes demora, es porque el servidor se está levantando o no está disponible.",
+            "#ffebee",
+            "#c62828"
+        );
     }
 }
 
@@ -134,6 +217,8 @@ canvas.addEventListener("mouseenter", () => {
 
 canvas.addEventListener("mouseleave", () => {
     mouseInCanvas = false;
+    hoverElement = null;
+    updateCanvasCursor();
     drawGraph();
 });
 
@@ -146,7 +231,7 @@ canvas.addEventListener("mousedown", (e) => {
     mouseY = pos.y;
 
     const node = findNodeAt(pos.x, pos.y);
-    if (node) {
+    if (node && currentTool === "hand") {
         draggingNode = node;
         dragOffsetX = pos.x - node.x;
         dragOffsetY = pos.y - node.y;
@@ -162,17 +247,41 @@ canvas.addEventListener("mousemove", (e) => {
         draggingNode.x = pos.x - dragOffsetX;
         draggingNode.y = pos.y - dragOffsetY;
         drawGraph();
-    } else if (currentTool === "node" || currentTool === "connector") {
-        drawGraph();
+        positionNodeMenuIfVisible();
+        positionEdgeMenuIfVisible();
+        return;
     }
+
+    // Hover detection
+    const node = findNodeAt(pos.x, pos.y);
+    if (node) {
+        hoverElement = { type: "node", id: node.id };
+        showNodeMenu(node);
+        hideEdgeMenu();
+    } else {
+        const edge = findEdgeNear(pos.x, pos.y);
+        if (edge) {
+            hoverElement = { type: "edge", id: edge.id };
+            hideNodeMenu();
+            showEdgeMenu(edge);
+        } else {
+            hoverElement = null;
+            hideNodeMenu();
+            hideEdgeMenu();
+        }
+    }
+
+    updateCanvasCursor();
+    drawGraph();
 });
 
 canvas.addEventListener("mouseup", () => {
     draggingNode = null;
+    updateCanvasCursor();
 });
 
 // ----------------------
-//   Canvas: click (crear / seleccionar)
+//   Canvas: click
 // ----------------------
 canvas.addEventListener("click", (e) => {
     const pos = getMousePos(e);
@@ -183,46 +292,39 @@ canvas.addEventListener("click", (e) => {
     if (currentTool === "node") {
         if (!node) {
             createNode(pos.x, pos.y);
-            return;
-        } else {
-            selectedElement = { type: "node", id: node.id };
-            connectorStartNodeId = null;
-            drawGraph();
-            return;
         }
+        return;
     }
 
     if (currentTool === "connector") {
         if (node) {
             if (connectorStartNodeId === null) {
                 connectorStartNodeId = node.id;
-                selectedElement = { type: "node", id: node.id };
             } else {
                 const startId = connectorStartNodeId;
                 const endId = node.id;
                 if (startId !== endId && !edgeExists(startId, endId)) {
                     createEdge(startId, endId);
                 }
+                // 👇 YA NO cambiamos a Mano: se queda en conector
                 connectorStartNodeId = null;
-                selectedElement = null;
             }
+            updateModeStatus();
             drawGraph();
-            return;
         }
+        return;
     }
 
-    if (!currentTool) {
+    // Modo Mano: selección visual
+    if (currentTool === "hand") {
         if (node) {
             selectedElement = { type: "node", id: node.id };
-            connectorStartNodeId = null;
         } else {
             const edge = findEdgeNear(pos.x, pos.y);
             if (edge) {
                 selectedElement = { type: "edge", id: edge.id };
-                connectorStartNodeId = null;
             } else {
                 selectedElement = null;
-                connectorStartNodeId = null;
             }
         }
         drawGraph();
@@ -230,15 +332,12 @@ canvas.addEventListener("click", (e) => {
 });
 
 // ----------------------
-//   Teclas: Delete / Escape
+//   Teclas: ESC / Delete
 // ----------------------
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-        currentTool = null;
-        connectorStartNodeId = null;
-        selectedElement = null;
-        setActiveToolButton();
-        drawGraph();
+        // Siempre vuelve a Mano
+        setTool("hand");
         return;
     }
 
@@ -246,12 +345,9 @@ document.addEventListener("keydown", (e) => {
         if (!selectedElement) return;
 
         if (selectedElement.type === "node") {
-            const id = selectedElement.id;
-            nodes = nodes.filter(n => n.id !== id);
-            edges = edges.filter(e => e.u !== id && e.v !== id);
+            deleteNode(selectedElement.id);
         } else if (selectedElement.type === "edge") {
-            const id = selectedElement.id;
-            edges = edges.filter(e => e.id !== id);
+            deleteEdge(selectedElement.id);
         }
         selectedElement = null;
         currentBridges = [];
@@ -259,6 +355,100 @@ document.addEventListener("keydown", (e) => {
         updateBridgeList([]);
         setGraphMessage("");
         drawGraph();
+    }
+});
+
+// ----------------------
+//   Menú flotante de nodo
+// ----------------------
+function showNodeMenu(node) {
+    nodeMenuNodeId = node.id;
+    nodeMenu.style.display = "flex";
+    positionNodeMenuIfVisible();
+}
+
+function hideNodeMenu() {
+    nodeMenu.style.display = "none";
+    nodeMenuNodeId = null;
+}
+
+function positionNodeMenuIfVisible() {
+    if (nodeMenuNodeId === null) return;
+    const node = getNodeById(nodeMenuNodeId);
+    if (!node) {
+        hideNodeMenu();
+        return;
+    }
+    // Posicionar relativo al wrapper, usando coordenadas del nodo
+    const wrapperRect = canvas.parentElement.getBoundingClientRect();
+    nodeMenu.style.left = `${node.x}px`;
+    nodeMenu.style.top = `${node.y - 30}px`;
+}
+
+nodeMenuConnectBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (nodeMenuNodeId !== null) {
+        connectorStartNodeId = nodeMenuNodeId;
+        setTool("connector");
+    }
+});
+
+nodeMenuDeleteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (nodeMenuNodeId !== null) {
+        deleteNode(nodeMenuNodeId);
+        nodeMenuNodeId = null;
+        hideNodeMenu();
+        drawGraph();
+        updateEdgeList();
+        updateBridgeList([]);
+    }
+});
+
+// ----------------------
+//   Menú flotante de arista
+// ----------------------
+function showEdgeMenu(edge) {
+    edgeMenuEdgeId = edge.id;
+    edgeMenu.style.display = "block";
+    positionEdgeMenuIfVisible();
+}
+
+function hideEdgeMenu() {
+    edgeMenu.style.display = "none";
+    edgeMenuEdgeId = null;
+}
+
+function positionEdgeMenuIfVisible() {
+    if (edgeMenuEdgeId === null) return;
+    const edge = edges.find(e => e.id === edgeMenuEdgeId);
+    if (!edge) {
+        hideEdgeMenu();
+        return;
+    }
+    const u = getNodeById(edge.u);
+    const v = getNodeById(edge.v);
+    if (!u || !v) {
+        hideEdgeMenu();
+        return;
+    }
+    const midX = (u.x + v.x) / 2;
+    const midY = (u.y + v.y) / 2;
+
+    const wrapperRect = canvas.parentElement.getBoundingClientRect();
+    edgeMenu.style.left = `${midX}px`;
+    edgeMenu.style.top = `${midY - 10}px`;
+}
+
+edgeMenuDeleteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (edgeMenuEdgeId !== null) {
+        deleteEdge(edgeMenuEdgeId);
+        edgeMenuEdgeId = null;
+        hideEdgeMenu();
+        drawGraph();
+        updateEdgeList();
+        updateBridgeList([]);
     }
 });
 
@@ -276,6 +466,15 @@ function createEdge(uId, vId) {
     edges.push(edge);
     updateEdgeList();
     drawGraph();
+}
+
+function deleteNode(id) {
+    nodes = nodes.filter(n => n.id !== id);
+    edges = edges.filter(e => e.u !== id && e.v !== id);
+}
+
+function deleteEdge(id) {
+    edges = edges.filter(e => e.id !== id);
 }
 
 function edgeExists(a, b) {
@@ -296,7 +495,10 @@ function generateRandomGraph() {
     nextEdgeId = 0;
     currentBridges = [];
     selectedElement = null;
+    hoverElement = null;
     connectorStartNodeId = null;
+    hideNodeMenu();
+    hideEdgeMenu();
 
     for (let i = 0; i < N; i++) {
         const x = 60 + Math.random() * (canvas.width - 120);
@@ -333,7 +535,7 @@ function generateRandomGraph() {
 
     updateEdgeList();
     updateBridgeList([]);
-    setGraphMessage("Verificando si el grafo generado tiene puentes...");
+    setGraphMessage("Verificando si el grafo generado tiene puentes...", "#e8f4ff", "#00529b");
     drawGraph();
     detectBridgesAndShowMessage();
 }
@@ -355,10 +557,19 @@ function drawGraph() {
             (b[0] === e.v && b[1] === e.u)
         );
 
-        const isSelectedEdge = selectedElement && selectedElement.type === "edge" && selectedElement.id === e.id;
+        const isHoverEdge =
+            hoverElement && hoverElement.type === "edge" && hoverElement.id === e.id;
 
-        ctx.strokeStyle = isBridge ? "red" : (isSelectedEdge ? "#ff9800" : "#555");
-        ctx.lineWidth = isBridge || isSelectedEdge ? 4 : 2;
+        if (isBridge) {
+            ctx.strokeStyle = "#e53935";
+            ctx.lineWidth = 4;
+        } else if (isHoverEdge) {
+            ctx.strokeStyle = "#00acc1";
+            ctx.lineWidth = 3;
+        } else {
+            ctx.strokeStyle = "#757575";
+            ctx.lineWidth = 2;
+        }
 
         ctx.beginPath();
         ctx.moveTo(uNode.x, uNode.y);
@@ -368,46 +579,53 @@ function drawGraph() {
 
     // Nodos
     nodes.forEach(n => {
-        const isSelectedNode = selectedElement && selectedElement.type === "node" && selectedElement.id === n.id;
+        const isHoverNode =
+            hoverElement && hoverElement.type === "node" && hoverElement.id === n.id;
 
-        ctx.fillStyle = "#0077ff";
+        let fillColor = "#009688";
+        let radius = 20;
+
+        if (isHoverNode) {
+            fillColor = "#00796b";
+            radius = 22;
+        }
+
+        ctx.fillStyle = fillColor;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, 20, 0, Math.PI * 2);
+        ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
         ctx.fill();
 
-        if (isSelectedNode) {
-            ctx.strokeStyle = "#ff9800";
-            ctx.lineWidth = 3;
+        if (isHoverNode) {
+            ctx.strokeStyle = "#4dd0e1";
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(n.x, n.y, 24, 0, Math.PI * 2);
+            ctx.arc(n.x, n.y, radius + 2, 0, Math.PI * 2);
             ctx.stroke();
         }
 
         ctx.fillStyle = "white";
-        ctx.font = "15px Arial";
+        ctx.font = "15px Roboto, Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(n.id, n.x, n.y);
     });
 
-    // símbolo en el puntero
+    // Ghost del cursor según herramienta
     if (!mouseInCanvas || draggingNode) return;
 
     if (currentTool === "node") {
         ctx.save();
-        ctx.globalAlpha = 0.4;
-        ctx.fillStyle = "#0077ff";
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = "#009688";
         ctx.beginPath();
-        ctx.arc(mouseX, mouseY, 18, 0, Math.PI * 2);
+        ctx.arc(mouseX, mouseY, 16, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
-    }
-
-    if (currentTool === "connector" && connectorStartNodeId !== null) {
+    } else if (currentTool === "connector" && connectorStartNodeId !== null) {
         const startNode = getNodeById(connectorStartNodeId);
         if (startNode) {
             ctx.save();
-            ctx.strokeStyle = "#0077ff";
+            ctx.strokeStyle = "#009688";
             ctx.lineWidth = 2;
             ctx.setLineDash([5, 5]);
             ctx.beginPath();
@@ -422,6 +640,28 @@ function drawGraph() {
 // ----------------------
 //   Helpers
 // ----------------------
+function updateCanvasCursor() {
+    if (draggingNode) {
+        canvas.style.cursor = "grabbing";
+        return;
+    }
+
+    if (hoverElement && (hoverElement.type === "node" || hoverElement.type === "edge")) {
+        canvas.style.cursor = "pointer";
+        return;
+    }
+
+    if (currentTool === "node") {
+        canvas.style.cursor = "crosshair";
+    } else if (currentTool === "connector") {
+        canvas.style.cursor = "crosshair";
+    } else if (currentTool === "hand") {
+        canvas.style.cursor = "grab";
+    } else {
+        canvas.style.cursor = "default";
+    }
+}
+
 function getNodeById(id) {
     return nodes.find(n => n.id === id);
 }
@@ -499,7 +739,7 @@ function updateBridgeList(bridges) {
     ul.innerHTML = "";
     bridges.forEach(b => {
         const li = document.createElement("li");
-        li.style.color = "red";
+        li.style.color = "#e53935";
         li.textContent = `${b[0]} — ${b[1]}`;
         ul.appendChild(li);
     });
@@ -510,15 +750,17 @@ function setGraphMessage(text, bg, color) {
     div.textContent = text || "";
     if (!text) {
         div.style.background = "transparent";
-        div.style.border = "none";
-        div.style.color = "inherit";
+        div.style.borderColor = "transparent";
+        div.style.color = "#ffffff";
     } else {
-        div.style.background = bg || "#eeeeee";
-        div.style.color = color || "#333333";
-        div.style.border = `2px solid ${color || "#333333"}`;
+        div.style.background = bg || "rgba(255,255,255,0.1)";
+        div.style.color = color || "#ffffff";
+        div.style.borderColor = color || "transparent";
     }
 }
 
 // inicial
-setActiveToolButton();
+setTool("node");
+warmupBackend();
 drawGraph();
+updateCanvasCursor();
